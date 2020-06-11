@@ -19,18 +19,21 @@ from flask import Flask, Response, abort, json, jsonify, request
 
 #########[ Settings & Data ]###################################################
 
-DB_FILE_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), 
-    "../db/db.json"
-)
+APP_CONFIG = {
+    "HOST"          : "0.0.0.0",
+    "PORT"          : 5001,
+    "PREFIX"        : "/api/v1/",
+    "DEBUG"         : True,
+    "DB_FILE_PATH"  : "../db/db.json",
+}
 # Flask App object
 app = Flask(__name__)
-# Application config dict
-app_data = {}
+# Settings that will be modified by the user
+module_data = {}
 
 #########[ Utils ]#############################################################
 
-def json_response(response, status_code):
+def create_json_response(response, status_code):
     """
     Custom Response Function
     """
@@ -40,19 +43,30 @@ def json_response(response, status_code):
         status=status_code
     )
 
-def load_app_data_from_db_file():
-    global app_data
+def get_stored_data_in_db_file():
+    # obtain the full db path
+    full_db_file_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 
+        APP_CONFIG["DB_FILE_PATH"]
+    )
     # Read data from DB file
-    app_data = json.loads(open(DB_FILE_PATH).read())
+    stored_data = json.loads(open(full_db_file_path).read())
     # Print app data read
-    print("Data readed from DB file: " + str(app_data))
+    print("Data readed from DB file: " + str(stored_data))
+    # returns the data read from DB file as dict
+    return stored_data
 
-def save_current_app_data_to_db_file():
+def save_module_data_to_db_file(data_to_store):
+    # obtain the full db path
+    full_db_file_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 
+        APP_CONFIG["DB_FILE_PATH"]
+    )
     # Save current data into DB file
-    with open(DB_FILE_PATH, 'w') as db_file:
+    with open(full_db_file_path, 'w') as db_file:
         # save app data in json pretty mode
         json.dump(
-            app_data, 
+            data_to_store, 
             db_file, 
             ensure_ascii=False, 
             indent=4
@@ -60,42 +74,112 @@ def save_current_app_data_to_db_file():
     # Log the action to console
     print("Updated DB file with new app data")
 
-#########[ Views (route resources) ]###########################################
+#########[ Application Views (endpoints) ]#####################################
 
-@app.route('/', methods=['GET'])
+@app.route(APP_CONFIG["PREFIX"] + '', methods=['GET'])
 def get_app_config():
     # create response for all devices
-    response = app_data
+    response = APP_CONFIG
     # return the response with the status code
-    return json_response(response, 200)
+    return create_json_response(response, 200)
 
-@app.route('/', methods=['PUT'])
-def set_app_config():
-    global app_data
+@app.route(APP_CONFIG["PREFIX"] + '/module_settings/', methods=['GET'])
+def get_module_settings():
+    # create response for all devices
+    response = get_module_data()
+    # return the response with the status code
+    return create_json_response(response, 200)
 
+@app.route(APP_CONFIG["PREFIX"] + '/module_settings/', methods=['PUT', 'POST'])
+def set_module_settings():
     if not request.json:
-        return json_response(
+        return create_json_response(
             {'error' : 'Impossible to parse request body'}, 
             422
             )
+    # modify module data
+    set_module_data(request.json)
+    # obtain the current module data in a local variable
+    local_module_data = get_module_data()
+    # update DB file with new current module data
+    save_module_data_to_db_file(local_module_data)
+    # Send new current module data as response
+    response = local_module_data
+    return create_json_response(response, 200)
 
-    app_data.update(request.json)
-    save_current_app_data_to_db_file()
-    response = app_data
+@app.route(APP_CONFIG["PREFIX"] + '/module_settings/', methods=['DELETE'])
+def delete_module_settings():
+    def __validate_request():
+        # check the input data
+        if not request.json.get("keys_to_remove") or type(request.json["keys_to_remove"]) is not list:
+            return False
+        # iterate over keys to check if they are strings
+        for key in request.json["keys_to_remove"]:
+            if type(key) is not str:
+                return False
+        # if reaches this point is a valid data
+        return True
+    # validate if there is data in request in JSON format
+    if not request.json:
+        return create_json_response(
+            {'error' : 'Impossible to parse request body'}, 
+            422
+            )
+    # check if request data is valid
+    if not __validate_request():
+        return create_json_response(
+            {'error' : 'Bad request, it must be { "keys_to_remove" : ["key1", "key2"] }'}, 
+            400
+            )
+    # modify module data
+    delete_module_data(request.json["keys_to_remove"])
+    # obtain the current module data in a local variable
+    local_module_data = get_module_data()
+    # update DB file with new current module data
+    save_module_data_to_db_file(local_module_data)
+    # Send new current module data as response
+    response = local_module_data
+    return create_json_response(response, 200)
 
-    return json_response(response, 200)
+#########[ Specific module code ]##############################################
+
+"""
+In this section the specific application code must be defined. In this simple 
+example there are 3 function to get, set and delete module settings.
+
+Here could be specific function such us open a connection to some server, get 
+user inputs, and any other.
+
+The funcions/methods created in this section must be called from functions in
+views section. The existent functions can be used or new views can be created.
+"""
+
+def get_module_data():
+    return module_data
+
+def set_module_data(data_dict):
+    global module_data
+    module_data.update(data_dict)
+
+def delete_module_data(keys_to_remove):
+    global module_data
+    for key in keys_to_remove:
+        module_data.pop(key, None)
 
 #########[ Module main code ]##################################################
 
-def init_app_data():
-    load_app_data_from_db_file()
+def init_app():
+    # obtain the module data saved previously in DB file
+    local_module_data = get_stored_data_in_db_file()
+    # update the module data with data read from DB file
+    set_module_data(local_module_data)
 
 if __name__ == '__main__':
-    init_app_data()
+    init_app()
     app.run(
-        host=app_data.get("APP_HOST"), 
-        port=app_data.get("APP_PORT"),
-        debug=app_data.get("APP_DEBUG"),
+        host=APP_CONFIG.get("HOST"), 
+        port=APP_CONFIG.get("PORT"),
+        debug=APP_CONFIG.get("DEBUG"),
         )
 
 #########[ Enf of file ]#######################################################
