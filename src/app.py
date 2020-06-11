@@ -21,7 +21,7 @@ from flask import Flask, Response, abort, json, jsonify, request
 
 APP_CONFIG = {
     "HOST"          : "0.0.0.0",
-    "PORT"          : 5001,
+    "PORT"          : 5000,
     "PREFIX"        : "/api/v1/",
     "DEBUG"         : True,
     "DB_FILE_PATH"  : "../db/db.json",
@@ -43,7 +43,7 @@ def create_json_response(response, status_code):
         status=status_code
     )
 
-def get_stored_data_in_db_file():
+def db_get_stored_data():
     # obtain the full db path
     full_db_file_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), 
@@ -56,7 +56,7 @@ def get_stored_data_in_db_file():
     # returns the data read from DB file as dict
     return stored_data
 
-def save_module_data_to_db_file(data_to_store):
+def db_save_data_to_file(data_to_store):
     # obtain the full db path
     full_db_file_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), 
@@ -102,7 +102,7 @@ def set_module_settings():
     # obtain the current module data in a local variable
     local_module_data = get_module_data()
     # update DB file with new current module data
-    save_module_data_to_db_file(local_module_data)
+    db_save_data_to_file(local_module_data)
     # Send new current module data as response
     response = local_module_data
     return create_json_response(response, 200)
@@ -136,7 +136,7 @@ def delete_module_settings():
     # obtain the current module data in a local variable
     local_module_data = get_module_data()
     # update DB file with new current module data
-    save_module_data_to_db_file(local_module_data)
+    db_save_data_to_file(local_module_data)
     # Send new current module data as response
     response = local_module_data
     return create_json_response(response, 200)
@@ -170,7 +170,7 @@ def delete_module_data(keys_to_remove):
 
 def init_app():
     # obtain the module data saved previously in DB file
-    local_module_data = get_stored_data_in_db_file()
+    local_module_data = db_get_stored_data()
     # update the module data with data read from DB file
     set_module_data(local_module_data)
 
